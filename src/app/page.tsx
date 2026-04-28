@@ -1,13 +1,14 @@
 import { fetchSnapshots, fetchWallets } from "@/lib/supabase";
 import {
-  aggregatePoints,
-  allTimeChange,
-  changeOver,
-  formatPct,
-  formatSignedCompactUsd,
+  dailyAggregates,
   formatCompactUsd,
-  toPoints,
-  type Change,
+  formatDate,
+  formatPct,
+  latestDay,
+  peakDay,
+  pctChange,
+  rollingAverage,
+  type DailyMetric,
 } from "@/lib/metrics";
 import { MetricCard } from "@/components/MetricCard";
 import { NetWorthChart } from "@/components/NetWorthChart";
@@ -31,17 +32,16 @@ export default async function Page({
     fetchWallets(),
   ]);
 
-  const points = walletFilter ? toPoints(snapshots) : aggregatePoints(snapshots);
-  const latest = points.length ? points[points.length - 1] : null;
-  const first = points.length ? points[0] : null;
-
-  const c7 = changeOver(points, 7);
-  const c30 = changeOver(points, 30);
-  const cAll = allTimeChange(points);
+  const days = dailyAggregates(snapshots);
+  const latest = latestDay(days);
+  const first = days.length ? days[0] : null;
+  const avg7 = rollingAverage(days, 7);
+  const avg30 = rollingAverage(days, 30);
+  const peak = peakDay(days);
 
   const headerSubtitle = walletFilter
     ? `${snapshots.length} snapshot${snapshots.length === 1 ? "" : "s"} for this wallet`
-    : `Aggregated across ${wallets.length} wallet${wallets.length === 1 ? "" : "s"} · ${snapshots.length} snapshot${snapshots.length === 1 ? "" : "s"}`;
+    : `${wallets.length} wallets · ${snapshots.length} snapshots · ${days.length} day${days.length === 1 ? "" : "s"} of data`;
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
@@ -53,8 +53,7 @@ export default async function Page({
             {first && latest ? (
               <>
                 {" · "}
-                {new Date(first.t).toLocaleDateString()} →{" "}
-                {new Date(latest.t).toLocaleDateString()}
+                {formatDate(first.t)} → {formatDate(latest.t)}
               </>
             ) : null}
           </p>
@@ -62,37 +61,56 @@ export default async function Page({
         <WalletSelector wallets={wallets} current={walletFilter} />
       </header>
 
-      {points.length === 0 ? (
+      {days.length === 0 ? (
         <EmptyState filtered={!!walletFilter} />
       ) : (
         <>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <MetricCard
-              label={walletFilter ? "Current" : "Current AUM"}
+              label="Latest day"
               primary={latest ? formatCompactUsd(latest.total) : "—"}
               secondary={
-                latest ? `as of ${new Date(latest.t).toLocaleString()}` : undefined
+                latest
+                  ? `${formatDate(latest.t)} · ${latest.visitors.toLocaleString()} visitor${latest.visitors === 1 ? "" : "s"}`
+                  : undefined
               }
             />
-            <ChangeCard label="7D" change={c7} />
-            <ChangeCard label="30D" change={c30} />
-            <ChangeCard label="All-time" change={cAll} />
+            <AvgCard label="7D avg / day" metric={avg7} />
+            <AvgCard label="30D avg / day" metric={avg30} />
+            <MetricCard
+              label="Peak day"
+              primary={peak ? formatCompactUsd(peak.total) : "—"}
+              secondary={
+                peak
+                  ? `${formatDate(peak.t)} · ${peak.visitors.toLocaleString()} visitor${peak.visitors === 1 ? "" : "s"}`
+                  : undefined
+              }
+            />
           </div>
 
           <div className="mt-6">
-            <NetWorthChart points={points} />
+            <NetWorthChart days={days} />
           </div>
 
-          <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
             <MiniBreakdown
-              label={walletFilter ? "Liquid balance" : "Liquid balance (sum)"}
+              label="Latest day balance"
               value={latest ? formatCompactUsd(latest.balance) : "—"}
-              hint="balance column"
+              hint="balance column · sum of unique visitors"
             />
             <MiniBreakdown
-              label={walletFilter ? "Harvest balance" : "Harvest balance (sum)"}
+              label="Latest day harvest"
               value={latest ? formatCompactUsd(latest.harvest) : "—"}
-              hint="harvest_balance column"
+              hint="harvest_balance column · sum of unique visitors"
+            />
+            <MiniBreakdown
+              label="Avg per visitor (latest)"
+              value={
+                latest && latest.visitors > 0
+                  ? formatCompactUsd(latest.total / latest.visitors)
+                  : "—"
+              }
+              hint="latest day total / visitors"
             />
           </div>
         </>
@@ -101,18 +119,26 @@ export default async function Page({
   );
 }
 
-function ChangeCard({ label, change }: { label: string; change: Change }) {
-  if (!change) {
+function AvgCard({ label, metric }: { label: string; metric: DailyMetric | null }) {
+  if (!metric) {
+    return <MetricCard label={label} primary="—" secondary="No data" />;
+  }
+  if (!metric.prior) {
     return (
-      <MetricCard label={label} primary="—" secondary="Not enough history" />
+      <MetricCard
+        label={label}
+        primary={formatCompactUsd(metric.value)}
+        secondary={`over ${metric.daysUsed} day${metric.daysUsed === 1 ? "" : "s"}`}
+      />
     );
   }
-  const trend = change.abs > 0 ? "up" : change.abs < 0 ? "down" : "flat";
+  const delta = pctChange(metric.value, metric.prior.value);
+  const trend = delta === null ? "flat" : delta > 0 ? "up" : delta < 0 ? "down" : "flat";
   return (
     <MetricCard
       label={label}
-      primary={formatSignedCompactUsd(change.abs)}
-      secondary={`${formatPct(change.pct)} · was ${formatCompactUsd(change.from.total)}`}
+      primary={formatCompactUsd(metric.value)}
+      secondary={`${formatPct(delta)} vs prior ${metric.prior.daysUsed}d`}
       trend={trend}
     />
   );

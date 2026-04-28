@@ -1,89 +1,125 @@
 import type { Snapshot } from "./supabase";
 
-export type Point = {
+export type DayPoint = {
   t: number;
-  iso: string;
+  date: string;
+  label: string;
   total: number;
   balance: number;
   harvest: number;
+  visitors: number;
+  ma7: number | null;
 };
 
-export function toPoints(snapshots: Snapshot[]): Point[] {
-  return snapshots.map((s) => ({
-    t: new Date(s.connected_at).getTime(),
-    iso: s.connected_at,
-    total: s.balance + s.harvest_balance,
-    balance: s.balance,
-    harvest: s.harvest_balance,
-  }));
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+function dayKeyUtc(iso: string): string {
+  return new Date(iso).toISOString().slice(0, 10);
 }
 
-export function aggregatePoints(snapshots: Snapshot[]): Point[] {
+function dayLabel(date: string): string {
+  return new Date(date + "T00:00:00Z").toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+export function dailyAggregates(snapshots: Snapshot[]): DayPoint[] {
   if (snapshots.length === 0) return [];
 
-  const sorted = [...snapshots].sort(
-    (a, b) =>
-      new Date(a.connected_at).getTime() - new Date(b.connected_at).getTime(),
-  );
+  const byDay = new Map<string, Map<string, Snapshot>>();
 
-  const balByWallet = new Map<string, number>();
-  const harvestByWallet = new Map<string, number>();
-  let sumBalance = 0;
-  let sumHarvest = 0;
-  const points: Point[] = [];
-
-  for (const s of sorted) {
-    const prevBal = balByWallet.get(s.wallet_address) ?? 0;
-    const prevHar = harvestByWallet.get(s.wallet_address) ?? 0;
-    sumBalance += s.balance - prevBal;
-    sumHarvest += s.harvest_balance - prevHar;
-    balByWallet.set(s.wallet_address, s.balance);
-    harvestByWallet.set(s.wallet_address, s.harvest_balance);
-
-    points.push({
-      t: new Date(s.connected_at).getTime(),
-      iso: s.connected_at,
-      total: sumBalance + sumHarvest,
-      balance: sumBalance,
-      harvest: sumHarvest,
-    });
+  for (const s of snapshots) {
+    const key = dayKeyUtc(s.connected_at);
+    let walletMap = byDay.get(key);
+    if (!walletMap) {
+      walletMap = new Map();
+      byDay.set(key, walletMap);
+    }
+    const existing = walletMap.get(s.wallet_address);
+    if (
+      !existing ||
+      new Date(existing.connected_at).getTime() <
+        new Date(s.connected_at).getTime()
+    ) {
+      walletMap.set(s.wallet_address, s);
+    }
   }
 
-  return points;
+  const sortedKeys = [...byDay.keys()].sort();
+  const days: DayPoint[] = sortedKeys.map((key) => {
+    const walletMap = byDay.get(key)!;
+    let bal = 0;
+    let har = 0;
+    for (const s of walletMap.values()) {
+      bal += s.balance;
+      har += s.harvest_balance;
+    }
+    return {
+      t: new Date(key + "T00:00:00Z").getTime(),
+      date: key,
+      label: dayLabel(key),
+      total: bal + har,
+      balance: bal,
+      harvest: har,
+      visitors: walletMap.size,
+      ma7: null,
+    };
+  });
+
+  for (let i = 0; i < days.length; i++) {
+    const start = Math.max(0, i - 6);
+    const slice = days.slice(start, i + 1);
+    if (slice.length < 2) continue;
+    const sum = slice.reduce((acc, d) => acc + d.total, 0);
+    days[i].ma7 = sum / slice.length;
+  }
+
+  return days;
 }
 
-function firstAtOrAfter(points: Point[], cutoffMs: number): Point | null {
-  for (const p of points) if (p.t >= cutoffMs) return p;
-  return null;
+export function filterByDays(days: DayPoint[], range: number | null): DayPoint[] {
+  if (range === null || days.length === 0) return days;
+  const latest = days[days.length - 1].t;
+  const cutoff = latest - (range - 1) * MS_PER_DAY;
+  return days.filter((d) => d.t >= cutoff);
 }
 
-export type Change = { abs: number; pct: number | null; from: Point; to: Point } | null;
+export type DailyMetric = {
+  value: number;
+  daysUsed: number;
+  prior?: { value: number; daysUsed: number };
+};
 
-export function changeOver(points: Point[], days: number): Change {
-  if (points.length === 0) return null;
-  const latest = points[points.length - 1];
-  const cutoff = latest.t - days * 24 * 60 * 60 * 1000;
-  const baseline = firstAtOrAfter(points, cutoff);
-  if (!baseline || baseline.t === latest.t) return null;
-  const abs = latest.total - baseline.total;
-  const pct = baseline.total === 0 ? null : (abs / baseline.total) * 100;
-  return { abs, pct, from: baseline, to: latest };
+export function latestDay(days: DayPoint[]): DayPoint | null {
+  return days.length ? days[days.length - 1] : null;
 }
 
-export function allTimeChange(points: Point[]): Change {
-  if (points.length < 2) return null;
-  const first = points[0];
-  const last = points[points.length - 1];
-  const abs = last.total - first.total;
-  const pct = first.total === 0 ? null : (abs / first.total) * 100;
-  return { abs, pct, from: first, to: last };
+export function rollingAverage(days: DayPoint[], window: number): DailyMetric | null {
+  if (days.length === 0) return null;
+  const recent = days.slice(-window);
+  const value = recent.reduce((s, d) => s + d.total, 0) / recent.length;
+
+  const priorSlice = days.slice(-window * 2, -window);
+  let prior: DailyMetric["prior"];
+  if (priorSlice.length > 0) {
+    prior = {
+      value: priorSlice.reduce((s, d) => s + d.total, 0) / priorSlice.length,
+      daysUsed: priorSlice.length,
+    };
+  }
+  return { value, daysUsed: recent.length, prior };
 }
 
-export function filterByDays(points: Point[], days: number | null): Point[] {
-  if (days === null || points.length === 0) return points;
-  const latest = points[points.length - 1].t;
-  const cutoff = latest - days * 24 * 60 * 60 * 1000;
-  return points.filter((p) => p.t >= cutoff);
+export function peakDay(days: DayPoint[]): DayPoint | null {
+  if (days.length === 0) return null;
+  return days.reduce((best, d) => (d.total > best.total ? d : best), days[0]);
+}
+
+export function pctChange(curr: number, prior: number): number | null {
+  if (prior === 0) return null;
+  return ((curr - prior) / prior) * 100;
 }
 
 export function formatUsd(n: number): string {
@@ -100,6 +136,7 @@ export function formatCompactUsd(n: number): string {
   if (abs >= 1_000_000_000) return `${sign}$${(abs / 1_000_000_000).toFixed(2)}B`;
   if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(2)}M`;
   if (abs >= 10_000) return `${sign}$${(abs / 1_000).toFixed(1)}k`;
+  if (abs >= 1_000) return `${sign}$${(abs / 1_000).toFixed(2)}k`;
   return `${sign}$${abs.toFixed(0)}`;
 }
 
@@ -112,25 +149,14 @@ export function pickAxisFormatter(maxValue: number): (v: number) => string {
 export function formatPct(n: number | null): string {
   if (n === null) return "—";
   const sign = n > 0 ? "+" : "";
-  return `${sign}${n.toFixed(2)}%`;
+  return `${sign}${n.toFixed(1)}%`;
 }
 
-export function formatSignedUsd(n: number): string {
-  const sign = n > 0 ? "+" : n < 0 ? "−" : "";
-  const abs = Math.abs(n);
-  return `${sign}${abs.toLocaleString("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  })}`;
-}
-
-export function formatSignedCompactUsd(n: number): string {
-  if (n === 0) return "$0";
-  const sign = n > 0 ? "+" : "−";
-  const abs = Math.abs(n);
-  if (abs >= 1_000_000_000) return `${sign}$${(abs / 1_000_000_000).toFixed(2)}B`;
-  if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(2)}M`;
-  if (abs >= 10_000) return `${sign}$${(abs / 1_000).toFixed(1)}k`;
-  return `${sign}$${abs.toFixed(0)}`;
+export function formatDate(t: number): string {
+  return new Date(t).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
 }

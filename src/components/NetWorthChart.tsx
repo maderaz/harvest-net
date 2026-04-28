@@ -2,18 +2,18 @@
 
 import { useMemo, useState } from "react";
 import {
-  Area,
-  AreaChart,
+  Bar,
+  BarChart,
   CartesianGrid,
+  ComposedChart,
   Legend,
   Line,
-  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
-import type { Point } from "@/lib/metrics";
+import type { DayPoint } from "@/lib/metrics";
 import {
   filterByDays,
   formatCompactUsd,
@@ -30,60 +30,57 @@ const RANGES: Range[] = [
   { label: "All", days: null },
 ];
 
-type Mode = "area" | "lines";
+type Mode = "total" | "breakdown";
 
-export function NetWorthChart({ points }: { points: Point[] }) {
+type Row = {
+  label: string;
+  Total: number;
+  Balance: number;
+  Harvest: number;
+  visitors: number;
+  ma7: number | null;
+};
+
+export function NetWorthChart({ days }: { days: DayPoint[] }) {
   const [rangeIdx, setRangeIdx] = useState(1);
-  const [mode, setMode] = useState<Mode>("area");
+  const [mode, setMode] = useState<Mode>("total");
 
   const range = RANGES[rangeIdx];
-  const filtered = useMemo(() => filterByDays(points, range.days), [points, range.days]);
+  const filtered = useMemo(() => filterByDays(days, range.days), [days, range.days]);
 
-  const data = useMemo(
+  const data: Row[] = useMemo(
     () =>
-      filtered.map((p) => ({
-        t: p.t,
-        date: new Date(p.t).toLocaleDateString("en-US", {
-          month: "short",
-          day: "numeric",
-        }),
-        Total: Math.round(p.total),
-        Balance: Math.round(p.balance),
-        Harvest: Math.round(p.harvest),
+      filtered.map((d) => ({
+        label: d.label,
+        Total: Math.round(d.total),
+        Balance: Math.round(d.balance),
+        Harvest: Math.round(d.harvest),
+        visitors: d.visitors,
+        ma7: d.ma7 === null ? null : Math.round(d.ma7),
       })),
     [filtered],
   );
 
   const maxValue = useMemo(() => {
     let m = 0;
-    for (const d of data) {
-      if (mode === "area") m = Math.max(m, d.Total);
-      else m = Math.max(m, d.Total, d.Balance, d.Harvest);
-    }
+    for (const d of data) m = Math.max(m, d.Total);
     return m;
-  }, [data, mode]);
+  }, [data]);
 
   const axisFmt = useMemo(() => pickAxisFormatter(maxValue), [maxValue]);
-
-  const tooltipStyle = {
-    background: "#0b0d10",
-    border: "1px solid #1f252d",
-    borderRadius: 8,
-    color: "#e6e9ee",
-  };
 
   return (
     <div className="rounded-xl border border-border bg-panel p-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="text-xs uppercase tracking-wider text-muted">Net worth over time</div>
+          <div className="text-xs uppercase tracking-wider text-muted">Daily visitor net worth</div>
           <div className="text-sm text-muted">
-            {filtered.length} snapshot{filtered.length === 1 ? "" : "s"} in range
+            {filtered.length} day{filtered.length === 1 ? "" : "s"} in range · 7-day moving average overlaid
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <div className="flex rounded-lg border border-border bg-bg p-1">
-            {(["area", "lines"] as Mode[]).map((m) => (
+            {(["total", "breakdown"] as Mode[]).map((m) => (
               <button
                 key={m}
                 onClick={() => setMode(m)}
@@ -91,7 +88,7 @@ export function NetWorthChart({ points }: { points: Point[] }) {
                   mode === m ? "bg-panel text-white" : "text-muted hover:text-white"
                 }`}
               >
-                {m === "area" ? "Total" : "Breakdown"}
+                {m === "total" ? "Total" : "Breakdown"}
               </button>
             ))}
           </div>
@@ -113,16 +110,10 @@ export function NetWorthChart({ points }: { points: Point[] }) {
 
       <div className="h-80 w-full">
         <ResponsiveContainer width="100%" height="100%">
-          {mode === "area" ? (
-            <AreaChart data={data} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
-              <defs>
-                <linearGradient id="totalFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#22c55e" stopOpacity={0.4} />
-                  <stop offset="100%" stopColor="#22c55e" stopOpacity={0} />
-                </linearGradient>
-              </defs>
+          {mode === "total" ? (
+            <ComposedChart data={data} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
               <CartesianGrid stroke="#1f252d" vertical={false} />
-              <XAxis dataKey="date" stroke="#8a93a0" tickLine={false} axisLine={false} />
+              <XAxis dataKey="label" stroke="#8a93a0" tickLine={false} axisLine={false} />
               <YAxis
                 stroke="#8a93a0"
                 tickLine={false}
@@ -130,40 +121,89 @@ export function NetWorthChart({ points }: { points: Point[] }) {
                 tickFormatter={axisFmt}
                 width={70}
               />
-              <Tooltip
-                contentStyle={tooltipStyle}
-                formatter={(v: number) => formatCompactUsd(v)}
-              />
-              <Area
-                type="monotone"
-                dataKey="Total"
-                stroke="#22c55e"
-                strokeWidth={2}
-                fill="url(#totalFill)"
-              />
-            </AreaChart>
-          ) : (
-            <LineChart data={data} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
-              <CartesianGrid stroke="#1f252d" vertical={false} />
-              <XAxis dataKey="date" stroke="#8a93a0" tickLine={false} axisLine={false} />
-              <YAxis
-                stroke="#8a93a0"
-                tickLine={false}
-                axisLine={false}
-                tickFormatter={axisFmt}
-                width={70}
-              />
-              <Tooltip
-                contentStyle={tooltipStyle}
-                formatter={(v: number) => formatCompactUsd(v)}
-              />
+              <Tooltip content={<DailyTooltip />} cursor={{ fill: "#1f252d" }} />
               <Legend wrapperStyle={{ color: "#8a93a0" }} />
-              <Line type="monotone" dataKey="Total" stroke="#22c55e" strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="Balance" stroke="#60a5fa" strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="Harvest" stroke="#f59e0b" strokeWidth={2} dot={false} />
-            </LineChart>
+              <Bar
+                dataKey="Total"
+                name="Daily total"
+                fill="#22c55e"
+                radius={[4, 4, 0, 0]}
+                maxBarSize={40}
+              />
+              <Line
+                type="monotone"
+                dataKey="ma7"
+                name="7-day avg"
+                stroke="#f59e0b"
+                strokeWidth={2}
+                dot={false}
+                connectNulls
+              />
+            </ComposedChart>
+          ) : (
+            <BarChart data={data} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
+              <CartesianGrid stroke="#1f252d" vertical={false} />
+              <XAxis dataKey="label" stroke="#8a93a0" tickLine={false} axisLine={false} />
+              <YAxis
+                stroke="#8a93a0"
+                tickLine={false}
+                axisLine={false}
+                tickFormatter={axisFmt}
+                width={70}
+              />
+              <Tooltip content={<DailyTooltip />} cursor={{ fill: "#1f252d" }} />
+              <Legend wrapperStyle={{ color: "#8a93a0" }} />
+              <Bar
+                dataKey="Balance"
+                stackId="b"
+                fill="#60a5fa"
+                radius={[0, 0, 0, 0]}
+                maxBarSize={40}
+              />
+              <Bar
+                dataKey="Harvest"
+                stackId="b"
+                fill="#f59e0b"
+                radius={[4, 4, 0, 0]}
+                maxBarSize={40}
+              />
+            </BarChart>
           )}
         </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+function DailyTooltip({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+  payload?: Array<{ payload: Row }>;
+  label?: string;
+}) {
+  if (!active || !payload || payload.length === 0) return null;
+  const row = payload[0].payload;
+  return (
+    <div className="rounded-lg border border-border bg-bg p-3 text-sm">
+      <div className="mb-1 font-medium text-white">{label}</div>
+      <div className="grid grid-cols-[auto_auto] gap-x-4 gap-y-0.5 tabular-nums">
+        <span className="text-muted">Total</span>
+        <span className="text-white">{formatCompactUsd(row.Total)}</span>
+        <span className="text-muted">Balance</span>
+        <span className="text-white">{formatCompactUsd(row.Balance)}</span>
+        <span className="text-muted">Harvest</span>
+        <span className="text-white">{formatCompactUsd(row.Harvest)}</span>
+        <span className="text-muted">Visitors</span>
+        <span className="text-white">{row.visitors.toLocaleString()}</span>
+        {row.ma7 !== null ? (
+          <>
+            <span className="text-muted">7d avg</span>
+            <span className="text-white">{formatCompactUsd(row.ma7)}</span>
+          </>
+        ) : null}
       </div>
     </div>
   );
