@@ -1,19 +1,23 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+let _client: SupabaseClient | null = null;
 
-if (!url || !key) {
-  throw new Error(
-    "Missing Supabase env. Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.",
-  );
+function getClient(): SupabaseClient {
+  if (_client) return _client;
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) {
+    throw new Error(
+      "Missing Supabase env. Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.",
+    );
+  }
+  _client = createClient(url, key, { auth: { persistSession: false } });
+  return _client;
 }
 
-export const supabase = createClient(url, key, {
-  auth: { persistSession: false },
-});
-
-export const TABLE = process.env.SUPABASE_TABLE ?? "wallets";
+function table(): string {
+  return process.env.SUPABASE_TABLE ?? "wallets";
+}
 
 export type Snapshot = {
   id: string;
@@ -24,8 +28,8 @@ export type Snapshot = {
 };
 
 export async function fetchSnapshots(walletAddress?: string): Promise<Snapshot[]> {
-  let query = supabase
-    .from(TABLE)
+  let query = getClient()
+    .from(table())
     .select("id, wallet_address, connected_at, balance, harvest_balance")
     .order("connected_at", { ascending: true });
 
@@ -44,7 +48,7 @@ export async function fetchSnapshots(walletAddress?: string): Promise<Snapshot[]
 }
 
 export async function fetchWallets(): Promise<string[]> {
-  const { data, error } = await supabase.from(TABLE).select("wallet_address");
+  const { data, error } = await getClient().from(table()).select("wallet_address");
   if (error) throw new Error(`Supabase: ${error.message}`);
   const set = new Set<string>();
   (data ?? []).forEach((r: { wallet_address: string }) => set.add(r.wallet_address));
