@@ -1,10 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { RichListEntry } from "@/lib/metrics";
 import { formatCompactUsd, formatDate } from "@/lib/metrics";
 
 const PAGE_SIZE = 15;
+
+type Sort = "default" | "visits_desc" | "visits_asc";
+
+function nextSort(s: Sort): Sort {
+  if (s === "default") return "visits_desc";
+  if (s === "visits_desc") return "visits_asc";
+  return "default";
+}
 
 function shortAddr(a: string): string {
   return `${a.slice(0, 6)}…${a.slice(-4)}`;
@@ -75,10 +83,27 @@ export function RichList({
   nowMs: number;
 }) {
   const [page, setPage] = useState(0);
-  const pageCount = Math.max(1, Math.ceil(entries.length / PAGE_SIZE));
+  const [sort, setSort] = useState<Sort>("default");
+
+  const sorted = useMemo(() => {
+    if (sort === "default") return entries;
+    const copy = [...entries];
+    copy.sort((a, b) => (sort === "visits_desc" ? b.visits - a.visits : a.visits - b.visits));
+    return copy;
+  }, [entries, sort]);
+
+  const pageCount = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount - 1);
-  const slice = entries.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
+  const slice = sorted.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
   const startRank = safePage * PAGE_SIZE + 1;
+
+  function cycleSort() {
+    setSort((s) => nextSort(s));
+    setPage(0);
+  }
+
+  const sortIndicator =
+    sort === "visits_desc" ? "↓ visits" : sort === "visits_asc" ? "↑ visits" : null;
 
   return (
     <div className="rounded-xl border border-border bg-panel p-5">
@@ -86,7 +111,10 @@ export function RichList({
         <div>
           <div className="text-xs uppercase tracking-wider text-muted">Rich list</div>
           <div className="text-sm text-muted">
-            Top {entries.length} wallet{entries.length === 1 ? "" : "s"} · min $10k · ranked by latest net worth
+            Top {entries.length} wallet{entries.length === 1 ? "" : "s"} · min $10k ·{" "}
+            {sort === "default"
+              ? "ranked by latest net worth"
+              : `sorted ${sort === "visits_desc" ? "most" : "fewest"} visits first`}
           </div>
         </div>
         {pageCount > 1 ? (
@@ -126,7 +154,18 @@ export function RichList({
                 <th className="py-2 pr-3 text-right font-normal">Net worth</th>
                 <th className="py-2 pr-3 font-normal">First connected</th>
                 <th className="py-2 pr-3 font-normal">Last connected</th>
-                <th className="py-2 pr-3 font-normal">Status</th>
+                <th className="py-2 pr-3 font-normal">
+                  <button
+                    onClick={cycleSort}
+                    className="inline-flex items-center gap-1 uppercase tracking-wider text-muted hover:text-white"
+                    title="Click to sort by visit count"
+                  >
+                    Status
+                    <span className="text-[10px]">
+                      {sortIndicator ?? "↕"}
+                    </span>
+                  </button>
+                </th>
                 <th className="py-2 font-normal" />
               </tr>
             </thead>

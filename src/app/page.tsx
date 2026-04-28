@@ -41,7 +41,10 @@ export default async function Page({
   const avg7 = rollingAverage(days, 7, OUTLIER_THRESHOLD);
   const avg30 = rollingAverage(days, 30, OUTLIER_THRESHOLD);
   const peak = peakDay(days);
-  const richList = buildRichList(snapshots, 10_000, 20);
+  const richList = buildRichList(snapshots, 10_000, 20, [
+    "0x2222222222222222222222222222222222222222",
+    "0x5555555555555555555555555555555555555555",
+  ]);
 
   const headerSubtitle = walletFilter
     ? `${snapshots.length} snapshot${snapshots.length === 1 ? "" : "s"} for this wallet`

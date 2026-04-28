@@ -198,9 +198,13 @@ export function buildRichList(
   snapshots: Snapshot[],
   minTotal: number,
   limit: number,
+  excludeAddresses: string[] = [],
 ): RichListEntry[] {
+  const excluded = new Set(excludeAddresses.map((a) => a.toLowerCase()));
+
   const byWallet = new Map<string, Snapshot[]>();
   for (const s of snapshots) {
+    if (excluded.has(s.wallet_address.toLowerCase())) continue;
     let arr = byWallet.get(s.wallet_address);
     if (!arr) {
       arr = [];
