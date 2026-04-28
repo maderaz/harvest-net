@@ -197,7 +197,6 @@ export type RichListEntry = {
 export function buildRichList(
   snapshots: Snapshot[],
   minTotal: number,
-  limit: number,
   excludeAddresses: string[] = [],
 ): RichListEntry[] {
   const excluded = new Set(excludeAddresses.map((a) => a.toLowerCase()));
@@ -235,5 +234,5 @@ export function buildRichList(
   }
 
   entries.sort((a, b) => b.total - a.total);
-  return entries.slice(0, limit);
+  return entries;
 }

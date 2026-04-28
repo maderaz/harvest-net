@@ -41,7 +41,8 @@ export default async function Page({
   const avg7 = rollingAverage(days, 7, OUTLIER_THRESHOLD);
   const avg30 = rollingAverage(days, 30, OUTLIER_THRESHOLD);
   const peak = peakDay(days);
-  const richList = buildRichList(snapshots, 10_000, 20, [
+  const RICH_LIST_MIN = 1_000;
+  const richList = buildRichList(snapshots, RICH_LIST_MIN, [
     "0x2222222222222222222222222222222222222222",
     "0x5555555555555555555555555555555555555555",
   ]);
@@ -122,7 +123,11 @@ export default async function Page({
           </div>
 
           <div className="mt-6">
-            <RichList entries={richList} nowMs={Date.now()} />
+            <RichList
+              entries={richList}
+              nowMs={Date.now()}
+              minTotal={RICH_LIST_MIN}
+            />
           </div>
         </>
       )}

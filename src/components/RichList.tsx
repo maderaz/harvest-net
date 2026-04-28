@@ -78,9 +78,11 @@ function StatusBadge({
 export function RichList({
   entries,
   nowMs,
+  minTotal,
 }: {
   entries: RichListEntry[];
   nowMs: number;
+  minTotal: number;
 }) {
   const [page, setPage] = useState(0);
   const [sort, setSort] = useState<Sort>("default");
@@ -111,7 +113,8 @@ export function RichList({
         <div>
           <div className="text-xs uppercase tracking-wider text-muted">Rich list</div>
           <div className="text-sm text-muted">
-            Top {entries.length} wallet{entries.length === 1 ? "" : "s"} · min $10k ·{" "}
+            {entries.length.toLocaleString()} wallet{entries.length === 1 ? "" : "s"}{" "}
+            · min {formatCompactUsd(minTotal)} ·{" "}
             {sort === "default"
               ? "ranked by latest net worth"
               : `sorted ${sort === "visits_desc" ? "most" : "fewest"} visits first`}
@@ -142,7 +145,7 @@ export function RichList({
 
       {entries.length === 0 ? (
         <div className="py-6 text-center text-sm text-muted">
-          No wallets above $10k yet.
+          No wallets above {formatCompactUsd(minTotal)} yet.
         </div>
       ) : (
         <div className="overflow-x-auto">
