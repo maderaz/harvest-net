@@ -13,6 +13,8 @@ export type DayPoint = {
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
+export const OUTLIER_THRESHOLD = 100_000_000;
+
 function dayKeyUtc(iso: string): string {
   return new Date(iso).toISOString().slice(0, 10);
 }
@@ -89,27 +91,48 @@ export function filterByDays(days: DayPoint[], range: number | null): DayPoint[]
 export type DailyMetric = {
   value: number;
   daysUsed: number;
-  prior?: { value: number; daysUsed: number };
+  excluded: number;
+  prior?: { value: number; daysUsed: number; excluded: number };
 };
 
 export function latestDay(days: DayPoint[]): DayPoint | null {
   return days.length ? days[days.length - 1] : null;
 }
 
-export function rollingAverage(days: DayPoint[], window: number): DailyMetric | null {
-  if (days.length === 0) return null;
-  const recent = days.slice(-window);
-  const value = recent.reduce((s, d) => s + d.total, 0) / recent.length;
+function avgExcludingOutliers(
+  slice: DayPoint[],
+  excludeAbove: number | undefined,
+): { value: number; daysUsed: number; excluded: number } | null {
+  const kept =
+    excludeAbove === undefined
+      ? slice
+      : slice.filter((d) => d.total <= excludeAbove);
+  if (kept.length === 0) return null;
+  const value = kept.reduce((s, d) => s + d.total, 0) / kept.length;
+  return {
+    value,
+    daysUsed: kept.length,
+    excluded: slice.length - kept.length,
+  };
+}
 
-  const priorSlice = days.slice(-window * 2, -window);
-  let prior: DailyMetric["prior"];
-  if (priorSlice.length > 0) {
-    prior = {
-      value: priorSlice.reduce((s, d) => s + d.total, 0) / priorSlice.length,
-      daysUsed: priorSlice.length,
-    };
-  }
-  return { value, daysUsed: recent.length, prior };
+export function rollingAverage(
+  days: DayPoint[],
+  window: number,
+  excludeAbove?: number,
+): DailyMetric | null {
+  if (days.length === 0) return null;
+
+  const recent = avgExcludingOutliers(days.slice(-window), excludeAbove);
+  if (!recent) return null;
+
+  const priorRaw = days.slice(-window * 2, -window);
+  const prior =
+    priorRaw.length > 0
+      ? avgExcludingOutliers(priorRaw, excludeAbove) ?? undefined
+      : undefined;
+
+  return { ...recent, prior };
 }
 
 export function peakDay(days: DayPoint[]): DayPoint | null {

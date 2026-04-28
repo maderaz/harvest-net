@@ -1,5 +1,6 @@
 import { fetchSnapshots, fetchWallets } from "@/lib/supabase";
 import {
+  OUTLIER_THRESHOLD,
   buildRichList,
   dailyAggregates,
   formatCompactUsd,
@@ -37,8 +38,8 @@ export default async function Page({
   const days = dailyAggregates(snapshots);
   const latest = latestDay(days);
   const first = days.length ? days[0] : null;
-  const avg7 = rollingAverage(days, 7);
-  const avg30 = rollingAverage(days, 30);
+  const avg7 = rollingAverage(days, 7, OUTLIER_THRESHOLD);
+  const avg30 = rollingAverage(days, 30, OUTLIER_THRESHOLD);
   const peak = peakDay(days);
   const richList = buildRichList(snapshots, 10_000, 20);
 
@@ -130,12 +131,16 @@ function AvgCard({ label, metric }: { label: string; metric: DailyMetric | null 
   if (!metric) {
     return <MetricCard label={label} primary="—" secondary="No data" />;
   }
+  const excludedNote =
+    metric.excluded > 0
+      ? ` · ${metric.excluded} outlier${metric.excluded === 1 ? "" : "s"} excluded`
+      : "";
   if (!metric.prior) {
     return (
       <MetricCard
         label={label}
         primary={formatCompactUsd(metric.value)}
-        secondary={`over ${metric.daysUsed} day${metric.daysUsed === 1 ? "" : "s"}`}
+        secondary={`over ${metric.daysUsed} day${metric.daysUsed === 1 ? "" : "s"}${excludedNote}`}
       />
     );
   }
@@ -145,7 +150,7 @@ function AvgCard({ label, metric }: { label: string; metric: DailyMetric | null 
     <MetricCard
       label={label}
       primary={formatCompactUsd(metric.value)}
-      secondary={`${formatPct(delta)} vs prior ${metric.prior.daysUsed}d`}
+      secondary={`${formatPct(delta)} vs prior ${metric.prior.daysUsed}d${excludedNote}`}
       trend={trend}
     />
   );

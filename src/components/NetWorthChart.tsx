@@ -14,12 +14,13 @@ import {
 } from "recharts";
 import type { DayPoint } from "@/lib/metrics";
 import {
+  OUTLIER_THRESHOLD,
   filterByDays,
   formatCompactUsd,
   pickAxisFormatter,
 } from "@/lib/metrics";
 
-const DISPLAY_CAP = 100_000_000;
+const DISPLAY_CAP = OUTLIER_THRESHOLD;
 const CAP_COLOR = "#eab308";
 
 type Range = { label: string; days: number | null };
