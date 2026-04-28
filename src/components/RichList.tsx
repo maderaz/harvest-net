@@ -10,6 +10,27 @@ function shortAddr(a: string): string {
   return `${a.slice(0, 6)}…${a.slice(-4)}`;
 }
 
+function StatusBadge({ visits }: { visits: number }) {
+  if (visits > 1) {
+    return (
+      <span
+        title={`${visits} visits`}
+        className="inline-flex items-center rounded-full border border-accent/40 bg-accent/10 px-2 py-0.5 text-xs text-accent"
+      >
+        returning · {visits}
+      </span>
+    );
+  }
+  return (
+    <span
+      title="Connected once, never came back"
+      className="inline-flex items-center rounded-full border border-border bg-bg px-2 py-0.5 text-xs text-muted"
+    >
+      never returned
+    </span>
+  );
+}
+
 export function RichList({ entries }: { entries: RichListEntry[] }) {
   const [page, setPage] = useState(0);
   const pageCount = Math.max(1, Math.ceil(entries.length / PAGE_SIZE));
@@ -63,6 +84,7 @@ export function RichList({ entries }: { entries: RichListEntry[] }) {
                 <th className="py-2 pr-3 text-right font-normal">Net worth</th>
                 <th className="py-2 pr-3 font-normal">First connected</th>
                 <th className="py-2 pr-3 font-normal">Last connected</th>
+                <th className="py-2 pr-3 font-normal">Status</th>
                 <th className="py-2 font-normal" />
               </tr>
             </thead>
@@ -81,6 +103,9 @@ export function RichList({ entries }: { entries: RichListEntry[] }) {
                   </td>
                   <td className="py-3 pr-3 text-muted">
                     {formatDate(e.lastConnectedMs)}
+                  </td>
+                  <td className="py-3 pr-3">
+                    <StatusBadge visits={e.visits} />
                   </td>
                   <td className="py-3">
                     <a
