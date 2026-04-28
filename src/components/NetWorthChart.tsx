@@ -19,6 +19,7 @@ import {
   formatCompactUsd,
   pickAxisFormatter,
 } from "@/lib/metrics";
+import { DayDrilldown } from "./DayDrilldown";
 
 const DISPLAY_CAP = OUTLIER_THRESHOLD;
 const CAP_COLOR = "#eab308";
@@ -37,6 +38,7 @@ const DEFAULT_RANGE_IDX = RANGES.findIndex((r) => r.days === null);
 
 type Row = {
   label: string;
+  dayKey: string;
   Total: number;
   realTotal: number;
   capped: boolean;
@@ -45,6 +47,7 @@ type Row = {
 
 export function NetWorthChart({ days }: { days: DayPoint[] }) {
   const [rangeIdx, setRangeIdx] = useState(DEFAULT_RANGE_IDX);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
   const range = RANGES[rangeIdx];
   const filtered = useMemo(() => filterByDays(days, range.days), [days, range.days]);
@@ -56,6 +59,7 @@ export function NetWorthChart({ days }: { days: DayPoint[] }) {
         const capped = real > DISPLAY_CAP;
         return {
           label: d.label,
+          dayKey: d.date,
           Total: capped ? DISPLAY_CAP : real,
           realTotal: real,
           capped,
@@ -64,6 +68,16 @@ export function NetWorthChart({ days }: { days: DayPoint[] }) {
       }),
     [filtered],
   );
+
+  const selectedDay = useMemo(
+    () => (selectedKey ? days.find((d) => d.date === selectedKey) ?? null : null),
+    [days, selectedKey],
+  );
+
+  function handleBarClick(row: Row | undefined) {
+    if (!row) return;
+    setSelectedKey((prev) => (prev === row.dayKey ? null : row.dayKey));
+  }
 
   const cappedCount = useMemo(() => data.filter((d) => d.capped).length, [data]);
 
@@ -76,78 +90,95 @@ export function NetWorthChart({ days }: { days: DayPoint[] }) {
   const axisFmt = useMemo(() => pickAxisFormatter(maxValue), [maxValue]);
 
   return (
-    <div className="rounded-xl border border-border bg-panel p-5">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <div className="text-xs uppercase tracking-wider text-muted">Daily visitor net worth</div>
-          <div className="text-sm text-muted">
-            {filtered.length} day{filtered.length === 1 ? "" : "s"} in range
-            {cappedCount > 0 ? (
-              <>
-                {" · "}
-                <span style={{ color: CAP_COLOR }}>
-                  {cappedCount} day{cappedCount === 1 ? "" : "s"} capped at $100M (likely outliers)
-                </span>
-              </>
-            ) : null}
+    <div className="space-y-4">
+      <div className="rounded-xl border border-border bg-panel p-5">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-xs uppercase tracking-wider text-muted">Daily visitor net worth</div>
+            <div className="text-sm text-muted">
+              {filtered.length} day{filtered.length === 1 ? "" : "s"} in range · click a bar to drill in
+              {cappedCount > 0 ? (
+                <>
+                  {" · "}
+                  <span style={{ color: CAP_COLOR }}>
+                    {cappedCount} day{cappedCount === 1 ? "" : "s"} capped at $100M (likely outliers)
+                  </span>
+                </>
+              ) : null}
+            </div>
+          </div>
+          <div className="flex rounded-lg border border-border bg-bg p-1">
+            {RANGES.map((r, i) => (
+              <button
+                key={r.label}
+                onClick={() => setRangeIdx(i)}
+                className={`rounded-md px-3 py-1 text-xs ${
+                  i === rangeIdx ? "bg-panel text-white" : "text-muted hover:text-white"
+                }`}
+              >
+                {r.label}
+              </button>
+            ))}
           </div>
         </div>
-        <div className="flex rounded-lg border border-border bg-bg p-1">
-          {RANGES.map((r, i) => (
-            <button
-              key={r.label}
-              onClick={() => setRangeIdx(i)}
-              className={`rounded-md px-3 py-1 text-xs ${
-                i === rangeIdx ? "bg-panel text-white" : "text-muted hover:text-white"
-              }`}
-            >
-              {r.label}
-            </button>
-          ))}
+
+        <div className="h-80 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={data} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
+              <CartesianGrid stroke="#1f252d" vertical={false} />
+              <XAxis dataKey="label" stroke="#8a93a0" tickLine={false} axisLine={false} />
+              <YAxis
+                stroke="#8a93a0"
+                tickLine={false}
+                axisLine={false}
+                tickFormatter={axisFmt}
+                width={70}
+                domain={[0, DISPLAY_CAP]}
+                allowDataOverflow
+              />
+              <Tooltip content={<DailyTooltip />} cursor={{ fill: "#1f252d" }} />
+              {cappedCount > 0 ? (
+                <ReferenceLine
+                  y={DISPLAY_CAP}
+                  stroke={CAP_COLOR}
+                  strokeDasharray="4 4"
+                  label={{
+                    value: "$100M cap",
+                    fill: CAP_COLOR,
+                    fontSize: 11,
+                    position: "insideTopRight",
+                  }}
+                />
+              ) : null}
+              <Bar
+                dataKey="Total"
+                name="Daily total"
+                radius={[4, 4, 0, 0]}
+                maxBarSize={40}
+                onClick={(_, idx: number) => handleBarClick(data[idx])}
+                style={{ cursor: "pointer" }}
+              >
+                {data.map((row, i) => {
+                  const isSelected = row.dayKey === selectedKey;
+                  const base = row.capped ? CAP_COLOR : "#22c55e";
+                  return (
+                    <Cell
+                      key={i}
+                      fill={base}
+                      stroke={isSelected ? "#ffffff" : undefined}
+                      strokeWidth={isSelected ? 2 : 0}
+                    />
+                  );
+                })}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
         </div>
       </div>
 
-      <div className="h-80 w-full">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
-            <CartesianGrid stroke="#1f252d" vertical={false} />
-            <XAxis dataKey="label" stroke="#8a93a0" tickLine={false} axisLine={false} />
-            <YAxis
-              stroke="#8a93a0"
-              tickLine={false}
-              axisLine={false}
-              tickFormatter={axisFmt}
-              width={70}
-              domain={[0, DISPLAY_CAP]}
-              allowDataOverflow
-            />
-            <Tooltip content={<DailyTooltip />} cursor={{ fill: "#1f252d" }} />
-            {cappedCount > 0 ? (
-              <ReferenceLine
-                y={DISPLAY_CAP}
-                stroke={CAP_COLOR}
-                strokeDasharray="4 4"
-                label={{
-                  value: "$100M cap",
-                  fill: CAP_COLOR,
-                  fontSize: 11,
-                  position: "insideTopRight",
-                }}
-              />
-            ) : null}
-            <Bar
-              dataKey="Total"
-              name="Daily total"
-              radius={[4, 4, 0, 0]}
-              maxBarSize={40}
-            >
-              {data.map((row, i) => (
-                <Cell key={i} fill={row.capped ? CAP_COLOR : "#22c55e"} />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
+      {selectedDay ? (
+        <DayDrilldown day={selectedDay} onClose={() => setSelectedKey(null)} />
+      ) : null}
     </div>
   );
 }

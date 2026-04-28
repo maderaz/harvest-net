@@ -1,5 +1,13 @@
 import type { Snapshot } from "./supabase";
 
+export type WalletDay = {
+  wallet: string;
+  balance: number;
+  harvest: number;
+  total: number;
+  connectedAt: string;
+};
+
 export type DayPoint = {
   t: number;
   date: string;
@@ -9,6 +17,7 @@ export type DayPoint = {
   harvest: number;
   visitors: number;
   ma7: number | null;
+  wallets: WalletDay[];
 };
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -54,10 +63,19 @@ export function dailyAggregates(snapshots: Snapshot[]): DayPoint[] {
     const walletMap = byDay.get(key)!;
     let bal = 0;
     let har = 0;
+    const wallets: WalletDay[] = [];
     for (const s of walletMap.values()) {
       bal += s.balance;
       har += s.harvest_balance;
+      wallets.push({
+        wallet: s.wallet_address,
+        balance: s.balance,
+        harvest: s.harvest_balance,
+        total: s.balance + s.harvest_balance,
+        connectedAt: s.connected_at,
+      });
     }
+    wallets.sort((a, b) => b.total - a.total);
     return {
       t: new Date(key + "T00:00:00Z").getTime(),
       date: key,
@@ -67,6 +85,7 @@ export function dailyAggregates(snapshots: Snapshot[]): DayPoint[] {
       harvest: har,
       visitors: walletMap.size,
       ma7: null,
+      wallets,
     };
   });
 
