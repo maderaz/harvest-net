@@ -27,30 +27,59 @@ export type Snapshot = {
   harvest_balance: number;
 };
 
+const PAGE_SIZE = 1000;
+const MAX_PAGES = 100;
+
 export async function fetchSnapshots(walletAddress?: string): Promise<Snapshot[]> {
-  let query = getClient()
-    .from(table())
-    .select("id, wallet_address, connected_at, balance, harvest_balance")
-    .order("connected_at", { ascending: true });
+  const all: Snapshot[] = [];
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const from = page * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
 
-  if (walletAddress) query = query.eq("wallet_address", walletAddress);
+    let query = getClient()
+      .from(table())
+      .select("id, wallet_address, connected_at, balance, harvest_balance")
+      .order("connected_at", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, to);
 
-  const { data, error } = await query;
-  if (error) throw new Error(`Supabase: ${error.message}`);
+    if (walletAddress) query = query.eq("wallet_address", walletAddress);
 
-  return (data ?? []).map((r) => ({
-    id: r.id,
-    wallet_address: r.wallet_address,
-    connected_at: r.connected_at,
-    balance: Number(r.balance ?? 0),
-    harvest_balance: Number(r.harvest_balance ?? 0),
-  }));
+    const { data, error } = await query;
+    if (error) throw new Error(`Supabase: ${error.message}`);
+    if (!data || data.length === 0) break;
+
+    for (const r of data) {
+      all.push({
+        id: r.id,
+        wallet_address: r.wallet_address,
+        connected_at: r.connected_at,
+        balance: Number(r.balance ?? 0),
+        harvest_balance: Number(r.harvest_balance ?? 0),
+      });
+    }
+
+    if (data.length < PAGE_SIZE) break;
+  }
+  return all;
 }
 
 export async function fetchWallets(): Promise<string[]> {
-  const { data, error } = await getClient().from(table()).select("wallet_address");
-  if (error) throw new Error(`Supabase: ${error.message}`);
   const set = new Set<string>();
-  (data ?? []).forEach((r: { wallet_address: string }) => set.add(r.wallet_address));
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const from = page * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
+    const { data, error } = await getClient()
+      .from(table())
+      .select("wallet_address")
+      .order("wallet_address", { ascending: true })
+      .range(from, to);
+    if (error) throw new Error(`Supabase: ${error.message}`);
+    if (!data || data.length === 0) break;
+    for (const r of data as Array<{ wallet_address: string }>) {
+      set.add(r.wallet_address);
+    }
+    if (data.length < PAGE_SIZE) break;
+  }
   return [...set].sort();
 }
