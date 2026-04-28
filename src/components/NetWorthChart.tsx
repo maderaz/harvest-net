@@ -19,7 +19,8 @@ import {
   pickAxisFormatter,
 } from "@/lib/metrics";
 
-const DISPLAY_CAP = 500_000_000;
+const DISPLAY_CAP = 100_000_000;
+const CAP_COLOR = "#eab308";
 
 type Range = { label: string; days: number | null };
 
@@ -83,8 +84,8 @@ export function NetWorthChart({ days }: { days: DayPoint[] }) {
             {cappedCount > 0 ? (
               <>
                 {" · "}
-                <span className="text-danger">
-                  {cappedCount} day{cappedCount === 1 ? "" : "s"} capped at $500M (likely outliers)
+                <span style={{ color: CAP_COLOR }}>
+                  {cappedCount} day{cappedCount === 1 ? "" : "s"} capped at $100M (likely outliers)
                 </span>
               </>
             ) : null}
@@ -123,11 +124,11 @@ export function NetWorthChart({ days }: { days: DayPoint[] }) {
             {cappedCount > 0 ? (
               <ReferenceLine
                 y={DISPLAY_CAP}
-                stroke="#ef4444"
+                stroke={CAP_COLOR}
                 strokeDasharray="4 4"
                 label={{
-                  value: "$500M cap",
-                  fill: "#ef4444",
+                  value: "$100M cap",
+                  fill: CAP_COLOR,
                   fontSize: 11,
                   position: "insideTopRight",
                 }}
@@ -140,7 +141,7 @@ export function NetWorthChart({ days }: { days: DayPoint[] }) {
               maxBarSize={40}
             >
               {data.map((row, i) => (
-                <Cell key={i} fill={row.capped ? "#ef4444" : "#22c55e"} />
+                <Cell key={i} fill={row.capped ? CAP_COLOR : "#22c55e"} />
               ))}
             </Bar>
           </BarChart>
@@ -166,15 +167,15 @@ function DailyTooltip({
       <div className="mb-1 font-medium text-white">{label}</div>
       <div className="grid grid-cols-[auto_auto] gap-x-4 gap-y-0.5 tabular-nums">
         <span className="text-muted">Total</span>
-        <span className={row.capped ? "text-danger" : "text-white"}>
+        <span style={{ color: row.capped ? CAP_COLOR : "#e6e9ee" }}>
           {formatCompactUsd(row.realTotal)}
         </span>
         <span className="text-muted">Visitors</span>
         <span className="text-white">{row.visitors.toLocaleString()}</span>
       </div>
       {row.capped ? (
-        <div className="mt-2 text-xs text-danger">
-          Bar capped at $500M for display · likely an outlier wallet
+        <div className="mt-2 text-xs" style={{ color: CAP_COLOR }}>
+          Bar capped at $100M for display · likely an outlier wallet
         </div>
       ) : null}
     </div>
