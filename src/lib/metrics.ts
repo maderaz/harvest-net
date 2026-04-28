@@ -18,6 +18,40 @@ export function toPoints(snapshots: Snapshot[]): Point[] {
   }));
 }
 
+export function aggregatePoints(snapshots: Snapshot[]): Point[] {
+  if (snapshots.length === 0) return [];
+
+  const sorted = [...snapshots].sort(
+    (a, b) =>
+      new Date(a.connected_at).getTime() - new Date(b.connected_at).getTime(),
+  );
+
+  const balByWallet = new Map<string, number>();
+  const harvestByWallet = new Map<string, number>();
+  let sumBalance = 0;
+  let sumHarvest = 0;
+  const points: Point[] = [];
+
+  for (const s of sorted) {
+    const prevBal = balByWallet.get(s.wallet_address) ?? 0;
+    const prevHar = harvestByWallet.get(s.wallet_address) ?? 0;
+    sumBalance += s.balance - prevBal;
+    sumHarvest += s.harvest_balance - prevHar;
+    balByWallet.set(s.wallet_address, s.balance);
+    harvestByWallet.set(s.wallet_address, s.harvest_balance);
+
+    points.push({
+      t: new Date(s.connected_at).getTime(),
+      iso: s.connected_at,
+      total: sumBalance + sumHarvest,
+      balance: sumBalance,
+      harvest: sumHarvest,
+    });
+  }
+
+  return points;
+}
+
 function firstAtOrAfter(points: Point[], cutoffMs: number): Point | null {
   for (const p of points) if (p.t >= cutoffMs) return p;
   return null;
@@ -60,6 +94,21 @@ export function formatUsd(n: number): string {
   });
 }
 
+export function formatCompactUsd(n: number): string {
+  const abs = Math.abs(n);
+  const sign = n < 0 ? "-" : "";
+  if (abs >= 1_000_000_000) return `${sign}$${(abs / 1_000_000_000).toFixed(2)}B`;
+  if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(2)}M`;
+  if (abs >= 10_000) return `${sign}$${(abs / 1_000).toFixed(1)}k`;
+  return `${sign}$${abs.toFixed(0)}`;
+}
+
+export function pickAxisFormatter(maxValue: number): (v: number) => string {
+  if (maxValue >= 1_000_000) return (v) => `$${(v / 1_000_000).toFixed(1)}M`;
+  if (maxValue >= 10_000) return (v) => `$${(v / 1_000).toFixed(0)}k`;
+  return (v) => `$${v.toFixed(0)}`;
+}
+
 export function formatPct(n: number | null): string {
   if (n === null) return "—";
   const sign = n > 0 ? "+" : "";
@@ -74,4 +123,14 @@ export function formatSignedUsd(n: number): string {
     currency: "USD",
     maximumFractionDigits: 0,
   })}`;
+}
+
+export function formatSignedCompactUsd(n: number): string {
+  if (n === 0) return "$0";
+  const sign = n > 0 ? "+" : "−";
+  const abs = Math.abs(n);
+  if (abs >= 1_000_000_000) return `${sign}$${(abs / 1_000_000_000).toFixed(2)}B`;
+  if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(2)}M`;
+  if (abs >= 10_000) return `${sign}$${(abs / 1_000).toFixed(1)}k`;
+  return `${sign}$${abs.toFixed(0)}`;
 }

@@ -1,31 +1,23 @@
-import type { Change } from "@/lib/metrics";
-import { formatPct, formatSignedUsd } from "@/lib/metrics";
+type Trend = "up" | "down" | "flat";
 
 type Props = {
   label: string;
-  value: string;
-  change?: Change;
-  subtitle?: string;
+  primary: string;
+  secondary?: string;
+  trend?: Trend;
 };
 
-export function MetricCard({ label, value, change, subtitle }: Props) {
-  const trend = change && change.abs !== 0 ? (change.abs > 0 ? "up" : "down") : "flat";
+export function MetricCard({ label, primary, secondary, trend = "flat" }: Props) {
   const color =
-    trend === "up" ? "text-accent" : trend === "down" ? "text-danger" : "text-muted";
+    trend === "up" ? "text-accent" : trend === "down" ? "text-danger" : "text-white";
 
   return (
     <div className="rounded-xl border border-border bg-panel p-5">
       <div className="text-xs uppercase tracking-wider text-muted">{label}</div>
-      <div className="mt-2 text-3xl font-semibold tabular-nums">{value}</div>
-      {change ? (
-        <div className={`mt-1 text-sm tabular-nums ${color}`}>
-          {formatSignedUsd(change.abs)} ({formatPct(change.pct)})
-        </div>
-      ) : subtitle ? (
-        <div className="mt-1 text-sm text-muted">{subtitle}</div>
-      ) : (
-        <div className="mt-1 text-sm text-muted">—</div>
-      )}
+      <div className={`mt-2 text-3xl font-semibold tabular-nums ${color}`}>
+        {primary}
+      </div>
+      <div className="mt-1 text-sm text-muted">{secondary ?? "—"}</div>
     </div>
   );
 }

@@ -14,7 +14,11 @@ import {
   YAxis,
 } from "recharts";
 import type { Point } from "@/lib/metrics";
-import { filterByDays, formatUsd } from "@/lib/metrics";
+import {
+  filterByDays,
+  formatCompactUsd,
+  pickAxisFormatter,
+} from "@/lib/metrics";
 
 type Range = { label: string; days: number | null };
 
@@ -49,6 +53,24 @@ export function NetWorthChart({ points }: { points: Point[] }) {
       })),
     [filtered],
   );
+
+  const maxValue = useMemo(() => {
+    let m = 0;
+    for (const d of data) {
+      if (mode === "area") m = Math.max(m, d.Total);
+      else m = Math.max(m, d.Total, d.Balance, d.Harvest);
+    }
+    return m;
+  }, [data, mode]);
+
+  const axisFmt = useMemo(() => pickAxisFormatter(maxValue), [maxValue]);
+
+  const tooltipStyle = {
+    background: "#0b0d10",
+    border: "1px solid #1f252d",
+    borderRadius: 8,
+    color: "#e6e9ee",
+  };
 
   return (
     <div className="rounded-xl border border-border bg-panel p-5">
@@ -105,17 +127,12 @@ export function NetWorthChart({ points }: { points: Point[] }) {
                 stroke="#8a93a0"
                 tickLine={false}
                 axisLine={false}
-                tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`}
-                width={60}
+                tickFormatter={axisFmt}
+                width={70}
               />
               <Tooltip
-                contentStyle={{
-                  background: "#0b0d10",
-                  border: "1px solid #1f252d",
-                  borderRadius: 8,
-                  color: "#e6e9ee",
-                }}
-                formatter={(v: number) => formatUsd(v)}
+                contentStyle={tooltipStyle}
+                formatter={(v: number) => formatCompactUsd(v)}
               />
               <Area
                 type="monotone"
@@ -133,17 +150,12 @@ export function NetWorthChart({ points }: { points: Point[] }) {
                 stroke="#8a93a0"
                 tickLine={false}
                 axisLine={false}
-                tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`}
-                width={60}
+                tickFormatter={axisFmt}
+                width={70}
               />
               <Tooltip
-                contentStyle={{
-                  background: "#0b0d10",
-                  border: "1px solid #1f252d",
-                  borderRadius: 8,
-                  color: "#e6e9ee",
-                }}
-                formatter={(v: number) => formatUsd(v)}
+                contentStyle={tooltipStyle}
+                formatter={(v: number) => formatCompactUsd(v)}
               />
               <Legend wrapperStyle={{ color: "#8a93a0" }} />
               <Line type="monotone" dataKey="Total" stroke="#22c55e" strokeWidth={2} dot={false} />
