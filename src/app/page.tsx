@@ -119,7 +119,7 @@ export default async function Page({
           </div>
 
           <div className="mt-6">
-            <RichList entries={richList} />
+            <RichList entries={richList} nowMs={Date.now()} />
           </div>
         </>
       )}

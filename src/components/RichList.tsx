@@ -10,28 +10,70 @@ function shortAddr(a: string): string {
   return `${a.slice(0, 6)}…${a.slice(-4)}`;
 }
 
-function StatusBadge({ visits }: { visits: number }) {
-  if (visits > 1) {
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+function StatusBadge({
+  visits,
+  lastConnectedMs,
+  nowMs,
+}: {
+  visits: number;
+  lastConnectedMs: number;
+  nowMs: number;
+}) {
+  const days = Math.max(0, Math.floor((nowMs - lastConnectedMs) / MS_PER_DAY));
+  const tip = `${visits} visit${visits === 1 ? "" : "s"} · last ${days}d ago`;
+
+  if (visits === 1) {
     return (
       <span
-        title={`${visits} visits`}
-        className="inline-flex items-center rounded-full border border-accent/40 bg-accent/10 px-2 py-0.5 text-xs text-accent"
+        title={tip}
+        className="inline-flex items-center rounded-full border border-border bg-bg px-2 py-0.5 text-xs text-muted"
       >
-        returning · {visits}
+        never returned
       </span>
     );
   }
+
+  if (days <= 7) {
+    return (
+      <span
+        title={tip}
+        className="inline-flex items-center rounded-full border border-accent/40 bg-accent/10 px-2 py-0.5 text-xs text-accent"
+      >
+        active · {days}d
+      </span>
+    );
+  }
+
+  if (days > 30) {
+    return (
+      <span
+        title={tip}
+        className="inline-flex items-center rounded-full border border-orange-500/40 bg-orange-500/10 px-2 py-0.5 text-xs text-orange-400"
+      >
+        dormant · {days}d
+      </span>
+    );
+  }
+
   return (
     <span
-      title="Connected once, never came back"
-      className="inline-flex items-center rounded-full border border-border bg-bg px-2 py-0.5 text-xs text-muted"
+      title={tip}
+      className="inline-flex items-center rounded-full border border-blue-500/40 bg-blue-500/10 px-2 py-0.5 text-xs text-blue-400"
     >
-      never returned
+      returning · {visits}×
     </span>
   );
 }
 
-export function RichList({ entries }: { entries: RichListEntry[] }) {
+export function RichList({
+  entries,
+  nowMs,
+}: {
+  entries: RichListEntry[];
+  nowMs: number;
+}) {
   const [page, setPage] = useState(0);
   const pageCount = Math.max(1, Math.ceil(entries.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount - 1);
@@ -105,7 +147,11 @@ export function RichList({ entries }: { entries: RichListEntry[] }) {
                     {formatDate(e.lastConnectedMs)}
                   </td>
                   <td className="py-3 pr-3">
-                    <StatusBadge visits={e.visits} />
+                    <StatusBadge
+                      visits={e.visits}
+                      lastConnectedMs={e.lastConnectedMs}
+                      nowMs={nowMs}
+                    />
                   </td>
                   <td className="py-3">
                     <a
