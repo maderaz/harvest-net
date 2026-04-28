@@ -12,7 +12,7 @@ import {
   rollingAverage,
   type DailyMetric,
 } from "@/lib/metrics";
-import { MetricCard } from "@/components/MetricCard";
+import { MetricCard, pctColorClass } from "@/components/MetricCard";
 import { NetWorthChart } from "@/components/NetWorthChart";
 import { RichList } from "@/components/RichList";
 import { WalletSelector } from "@/components/WalletSelector";
@@ -40,7 +40,7 @@ export default async function Page({
   const first = days.length ? days[0] : null;
   const avg7 = rollingAverage(days, 7, OUTLIER_THRESHOLD);
   const avg30 = rollingAverage(days, 30, OUTLIER_THRESHOLD);
-  const peak = peakDay(days);
+  const peak = peakDay(days, OUTLIER_THRESHOLD);
   const RICH_LIST_MIN = 1_000;
   const richList = buildRichList(snapshots, RICH_LIST_MIN, [
     "0x2222222222222222222222222222222222222222",
@@ -153,13 +153,12 @@ function AvgCard({ label, metric }: { label: string; metric: DailyMetric | null 
     );
   }
   const delta = pctChange(metric.value, metric.prior.value);
-  const trend = delta === null ? "flat" : delta > 0 ? "up" : delta < 0 ? "down" : "flat";
   return (
     <MetricCard
       label={label}
       primary={formatCompactUsd(metric.value)}
       secondary={`${formatPct(delta)} vs prior ${metric.prior.daysUsed}d${excludedNote}`}
-      trend={trend}
+      primaryClassName={pctColorClass(delta)}
     />
   );
 }

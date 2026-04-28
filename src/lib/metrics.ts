@@ -135,9 +135,11 @@ export function rollingAverage(
   return { ...recent, prior };
 }
 
-export function peakDay(days: DayPoint[]): DayPoint | null {
-  if (days.length === 0) return null;
-  return days.reduce((best, d) => (d.total > best.total ? d : best), days[0]);
+export function peakDay(days: DayPoint[], excludeAbove?: number): DayPoint | null {
+  const eligible =
+    excludeAbove === undefined ? days : days.filter((d) => d.total <= excludeAbove);
+  if (eligible.length === 0) return null;
+  return eligible.reduce((best, d) => (d.total > best.total ? d : best), eligible[0]);
 }
 
 export function pctChange(curr: number, prior: number): number | null {
