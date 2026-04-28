@@ -160,3 +160,53 @@ export function formatDate(t: number): string {
     timeZone: "UTC",
   });
 }
+
+export type RichListEntry = {
+  wallet: string;
+  total: number;
+  balance: number;
+  harvest: number;
+  firstConnectedMs: number;
+  lastConnectedMs: number;
+  visits: number;
+};
+
+export function buildRichList(
+  snapshots: Snapshot[],
+  minTotal: number,
+  limit: number,
+): RichListEntry[] {
+  const byWallet = new Map<string, Snapshot[]>();
+  for (const s of snapshots) {
+    let arr = byWallet.get(s.wallet_address);
+    if (!arr) {
+      arr = [];
+      byWallet.set(s.wallet_address, arr);
+    }
+    arr.push(s);
+  }
+
+  const entries: RichListEntry[] = [];
+  for (const [wallet, snaps] of byWallet) {
+    snaps.sort(
+      (a, b) =>
+        new Date(a.connected_at).getTime() - new Date(b.connected_at).getTime(),
+    );
+    const latest = snaps[snaps.length - 1];
+    const first = snaps[0];
+    const total = latest.balance + latest.harvest_balance;
+    if (total < minTotal) continue;
+    entries.push({
+      wallet,
+      total,
+      balance: latest.balance,
+      harvest: latest.harvest_balance,
+      firstConnectedMs: new Date(first.connected_at).getTime(),
+      lastConnectedMs: new Date(latest.connected_at).getTime(),
+      visits: snaps.length,
+    });
+  }
+
+  entries.sort((a, b) => b.total - a.total);
+  return entries.slice(0, limit);
+}

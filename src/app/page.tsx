@@ -1,5 +1,6 @@
 import { fetchSnapshots, fetchWallets } from "@/lib/supabase";
 import {
+  buildRichList,
   dailyAggregates,
   formatCompactUsd,
   formatDate,
@@ -12,6 +13,7 @@ import {
 } from "@/lib/metrics";
 import { MetricCard } from "@/components/MetricCard";
 import { NetWorthChart } from "@/components/NetWorthChart";
+import { RichList } from "@/components/RichList";
 import { WalletSelector } from "@/components/WalletSelector";
 
 export const dynamic = "force-dynamic";
@@ -38,6 +40,7 @@ export default async function Page({
   const avg7 = rollingAverage(days, 7);
   const avg30 = rollingAverage(days, 30);
   const peak = peakDay(days);
+  const richList = buildRichList(snapshots, 10_000, 20);
 
   const headerSubtitle = walletFilter
     ? `${snapshots.length} snapshot${snapshots.length === 1 ? "" : "s"} for this wallet`
@@ -112,6 +115,10 @@ export default async function Page({
               }
               hint="latest day total / visitors"
             />
+          </div>
+
+          <div className="mt-6">
+            <RichList entries={richList} />
           </div>
         </>
       )}
